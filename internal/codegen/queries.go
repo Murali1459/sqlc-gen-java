@@ -253,8 +253,9 @@ func BuildQueriesFile(engine string, config core.Config, queryFilename string, q
 
 		queryInput := ""
 
+		useInputRecord := config.QueryParameterLimit != 0 && len(q.Args) >= config.QueryParameterLimit
 		// input method for query params limit
-		if len(q.Args) > config.QueryParameterLimit && config.QueryParameterLimit != 0 {
+		if useInputRecord {
 			queryInput = queryInputName(q)
 
 			body.WriteString("\n")
@@ -279,22 +280,29 @@ func BuildQueriesFile(engine string, config core.Config, queryFilename string, q
 		// write the method signature
 		body.WriteString("\n")
 		body.WriteIndentedString(1, fmt.Sprintf("public %s %s(", returnType, q.MethodName))
-		if len(q.Args) > config.QueryParameterLimit && config.QueryParameterLimit != 0 {
-			body.WriteString(fmt.Sprintf("%s %sinput) throws SQLException{\n", queryInput, queryInput))
-		} else if len(q.Args) > 0 {
+
+		if len(q.Args) > 0 {
 			body.WriteString("\n")
 
-			for i, arg := range q.Args {
-				imps, err := body.writeParameter(arg.JavaType, arg.Name, nonNullAnnotation, nullableAnnotation)
-				if err != nil {
-					return "", nil, err
-				}
-				if imps != nil {
-					imports = append(imports, imps...)
-				}
+			if useInputRecord {
+				body.WriteIndentedString(2, fmt.Sprintf("%s input", queryInput))
+			}
 
-				if i != len(q.Args)-1 {
-					body.WriteString(",\n")
+			for i, arg := range q.Args {
+				if useInputRecord {
+					arg.Name = "input." + arg.Name
+				} else {
+					imps, err := body.writeParameter(arg.JavaType, arg.Name, nonNullAnnotation, nullableAnnotation)
+					if err != nil {
+						return "", nil, err
+					}
+					if imps != nil {
+						imports = append(imports, imps...)
+					}
+
+					if i != len(q.Args)-1 {
+						body.WriteString(",\n")
+					}
 				}
 
 				methodBody.WriteIndentedString(2, arg.BindStmt(engine)+"\n")
